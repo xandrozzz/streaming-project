@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/nats-io/nats.go"
 	"log"
+	"os"
 	"streaming-project/database"
 	"streaming-project/https"
 	"streaming-project/models"
@@ -32,14 +33,20 @@ func natsJetStream(nc *nats.Conn) (nats.JetStreamContext, error) {
 }
 
 func createStream(ctx context.Context, jsCtx nats.JetStreamContext) (*nats.StreamInfo, error) {
-	stream, _ := jsCtx.StreamInfo("orderStream")
+
+	streamName, exists := os.LookupEnv("STREAM_NAME")
+	if !exists {
+		log.Fatalln("NATS stream name not found in .env file!")
+	}
+
+	stream, _ := jsCtx.StreamInfo(streamName)
 
 	var err error
 	if stream == nil {
 
 		stream, err = jsCtx.AddStream(&nats.StreamConfig{
-			Name:              "orderStream",
-			Subjects:          []string{"orderStream.*"},
+			Name:              streamName,
+			Subjects:          []string{streamName + ".*"},
 			Retention:         nats.WorkQueuePolicy,
 			Discard:           nats.DiscardOld,
 			MaxAge:            7 * 24 * time.Hour,
@@ -160,8 +167,13 @@ func StartConsumer(db *database.Database) error {
 		return err
 	}
 
+	consumerName, exists := os.LookupEnv("DURABLE_CONSUMER_NAME")
+	if !exists {
+		log.Fatalln("Durable consumer name not found in .env file!")
+	}
+
 	var consumer *nats.ConsumerInfo
-	consumer, err = createConsumer(ctx, jsctx, "orderProcessor", stream.Config.Name)
+	consumer, err = createConsumer(ctx, jsctx, consumerName, stream.Config.Name)
 	if err != nil {
 		return err
 	}
@@ -174,12 +186,21 @@ func StartConsumer(db *database.Database) error {
 		}
 	}(jsctx, stream.Config.Name, consumer.Name, cancel)
 
-	err = subscribe(ctx, jsctx, "orders.orderPlaced", consumer.Name, stream.Config.Name, db)
+	consumeSubject, exists := os.LookupEnv("CONSUME_SUBJECT")
+	if !exists {
+		log.Fatalln("Subject for consumption not found in .env file!")
+	}
+
+	err = subscribe(ctx, jsctx, consumeSubject, consumer.Name, stream.Config.Name, db)
 	if err != nil {
 		return err
 	}
 
-	router := https.NewRouter("localhost:4040", db)
+	routerPort, exists := os.LookupEnv("ROUTER_PORT")
+	if !exists {
+		log.Fatalln("Port for http server not found in .env file!")
+	}
+	router := https.NewRouter(routerPort, db)
 	err = router.Start()
 	if err != nil {
 		return err
