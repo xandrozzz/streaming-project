@@ -21,8 +21,14 @@ function App() {
                 'Access-Control-Allow-Methods':'GET,PUT,POST,DELETE,PATCH,OPTIONS'
             }
         }).then(function (response) {
-            setNewOrder(JSON.stringify(response.data))
+            if (response.status===200) {
+                setNewOrder(JSON.stringify(response.data))
+            }
+            else{
+                setNewOrder("No order could be found.")
+            }
         }).catch((e) => {
+            setNewOrder("No order could be found.")
             console.log(e)
         })
     }

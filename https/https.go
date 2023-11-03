@@ -33,7 +33,7 @@ func NewRouter(address string, db *database.Database) *Router {
 }
 
 func (r *Router) Start() error {
-	err := r.routerEngine.Run(r.routerAddress)
+	err := r.routerEngine.Run(":" + r.routerAddress)
 	if err != nil {
 		return err
 	}
